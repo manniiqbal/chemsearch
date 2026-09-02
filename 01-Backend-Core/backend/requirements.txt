@@ -1,0 +1,9 @@
+fastapi==0.116.1
+httpx==0.28.1
+pydantic-settings==2.10.1
+rdkit==2025.3.5
+torch==2.8.0
+transformers==4.55.4
+sentencepiece==0.2.1
+uvicorn[standard]==0.35.0
+
