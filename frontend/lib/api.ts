@@ -9,7 +9,7 @@ import type {
 export const API_BASE_URL =
     process.env.NEXT_PUBLIC_API_BASE_URL ??
     (process.env.NODE_ENV === "production"
-        ? "https://manniiqbal-chemsearch-api.hf.space"
+        ? "https://chemsearch.onrender.com"
         : "http://127.0.0.1:8000")
 
 export class ApiError extends Error {
@@ -25,7 +25,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
         response = await fetch(`${API_BASE_URL}${path}`, init)
     } catch {
         throw new ApiError(
-            "ChemSearch API is offline. Start the backend and try again.",
+            "The chemistry service is waking up. Wait about 30 seconds and try again.",
         )
     }
 
