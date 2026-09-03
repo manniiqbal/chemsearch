@@ -14,6 +14,7 @@ ALKENE_HYDROGENATION = ReactionRule(
     reaction_type="hydrogenation",
     smarts="[C;!$(C=O):1]=[C:2]>>[C:1]-[C:2]",
     reactant_count=1,
+    required_reagents=[ReactionParticipant("[H][H]")],
     description=("Reduces one non-carbonyl carbon-carbon double bond."),
 )
 
@@ -53,6 +54,15 @@ SECONDARY_ALCOHOL_OXIDATION = ReactionRule(
     smarts="[CH:1]([#6:2])([#6:3])[OH:4]>>[C:1]([#6:2])([#6:3])=[O:4]",
     reactant_count=1,
     description="Oxidises a secondary alcohol to its ketone.",
+)
+
+AEROBIC_PRIMARY_ALCOHOL_OXIDATION = ReactionRule(
+    rule_id="aerobic_primary_alcohol_oxidation_v1",
+    name="Aerobic primary alcohol oxidation",
+    reaction_type="aerobic_oxidation",
+    smarts="[#6:1][CH2:2][OH:3].[O:4]=[O:5]>>[#6:1][C:2](=[O:4])[OH:3].[OH2:5]",
+    reactant_count=2,
+    description="Oxidises a primary alcohol with oxygen to its carboxylic acid and water.",
 )
 
 ALDEHYDE_REDUCTION = ReactionRule(
@@ -106,6 +116,7 @@ DEFAULT_RULES: tuple[ReactionRule, ...] = (
     ALKENE_BROMINATION,
     PRIMARY_ALCOHOL_OXIDATION,
     SECONDARY_ALCOHOL_OXIDATION,
+    AEROBIC_PRIMARY_ALCOHOL_OXIDATION,
     ALDEHYDE_REDUCTION,
     KETONE_REDUCTION,
     FISCHER_ESTERIFICATION,
