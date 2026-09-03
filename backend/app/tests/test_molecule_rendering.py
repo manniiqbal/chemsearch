@@ -29,4 +29,4 @@ def test_rejects_invalid_smiles(client):
 def test_lists_curated_rules(client):
     response = client.get("/api/reactions/rules")
     assert response.status_code == 200
-    assert len(response.json()) == 10
+    assert len(response.json()) == 11

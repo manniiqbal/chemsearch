@@ -20,7 +20,7 @@ def test_simulate_hydrogenation_success(client):
                     "coefficient": 1,
                 }
             ],
-            "reagents": [],
+            "reagents": [{"canonical_smiles": "[H][H]", "coefficient": 1}],
             "reaction_type": "hydrogenation",
             "conditions": None,
         },
@@ -89,6 +89,7 @@ def test_simulate_incorrect_reactant_count(client):
                     "coefficient": 1,
                 },
             ],
+            "reagents": [{"canonical_smiles": "[H][H]", "coefficient": 1}],
             "reaction_type": "hydrogenation",
         },
     )
@@ -112,6 +113,7 @@ def test_simulate_no_reaction(client):
                     "coefficient": 1,
                 }
             ],
+            "reagents": [{"canonical_smiles": "[H][H]", "coefficient": 1}],
             "reaction_type": "hydrogenation",
         },
     )
@@ -125,6 +127,29 @@ def test_simulate_no_reaction(client):
     assert data["mappings"] == []
 
 
+def test_simulate_detects_aerobic_oxidation(client):
+    response = client.post(
+        "/api/reactions/simulate",
+        json={
+            "reactants": [
+                {"canonical_smiles": "CCO", "coefficient": 1},
+                {"canonical_smiles": "O=O", "coefficient": 1},
+            ],
+            "reagents": [],
+            "reaction_type": None,
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "simulated"
+    assert data["reaction_type"] == "aerobic_oxidation"
+    assert {
+        product["canonical_smiles"]
+        for product in data["product_sets"][0]["products"]
+    } == {"CC(=O)O", "O"}
+
+
 def test_simulate_invalid_molecule(client):
     response = client.post(
         "/api/reactions/simulate",
@@ -135,6 +160,7 @@ def test_simulate_invalid_molecule(client):
                     "coefficient": 1,
                 }
             ],
+            "reagents": [{"canonical_smiles": "[H][H]", "coefficient": 1}],
             "reaction_type": "hydrogenation",
         },
     )
@@ -172,4 +198,25 @@ def test_simulate_rejects_malformed_request(client):
         },
     )
 
+    assert response.status_code == 422
+
+
+@pytest.mark.parametrize(
+    "conditions",
+    [
+        {"temperature_c": -274},
+        {"pressure_bar": 0},
+        {"duration_minutes": 0},
+        {"ph": -1},
+        {"ph": 15},
+    ],
+)
+def test_simulate_rejects_impossible_conditions(client, conditions):
+    response = client.post(
+        "/api/reactions/simulate",
+        json={
+            "reactants": [{"canonical_smiles": "CCO", "coefficient": 1}],
+            "conditions": conditions,
+        },
+    )
     assert response.status_code == 422

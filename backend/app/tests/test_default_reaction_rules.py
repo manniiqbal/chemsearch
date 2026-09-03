@@ -16,11 +16,12 @@ def service():
 @pytest.mark.parametrize(
     ("reaction_type", "reactants", "reagents", "expected_products"),
     [
-        ("hydrogenation", ["C=C"], [], {"CC"}),
+        ("hydrogenation", ["C=C"], ["[H][H]"], {"CC"}),
         ("alkene_halogenation", ["C=C"], ["ClCl"], {"ClCCCl"}),
         ("alkene_halogenation", ["C=C"], ["BrBr"], {"BrCCBr"}),
         ("alcohol_oxidation", ["CCO"], [], {"CC=O"}),
         ("alcohol_oxidation", ["CC(O)C"], [], {"CC(C)=O"}),
+        ("aerobic_oxidation", ["CCO", "O=O"], [], {"CC(=O)O", "O"}),
         ("carbonyl_reduction", ["CC=O"], [], {"CCO"}),
         ("carbonyl_reduction", ["CC(C)=O"], [], {"CC(C)O"}),
         ("esterification", ["CC(=O)O", "CO"], [], {"COC(C)=O"}),
@@ -64,3 +65,46 @@ def test_each_reaction_class_ignores_incompatible_substrate(service, reaction_ty
         ReactionRequest(reactants=inert, reaction_type=reaction_type)
     )
     assert result.status in {ReactionStatus.NO_REACTION, ReactionStatus.FAILED}
+
+
+def test_reaction_type_is_detected_from_chemicals(service):
+    result = service.simulate_reaction(
+        ReactionRequest(
+            reactants=[ReactionParticipant("CCO"), ReactionParticipant("O=O")],
+        )
+    )
+    assert result.status == ReactionStatus.SIMULATED
+    assert result.reaction_type == "aerobic_oxidation"
+
+
+def test_hydrogenation_requires_hydrogen(service):
+    result = service.simulate_reaction(
+        ReactionRequest(reactants=[ReactionParticipant("C=C")])
+    )
+    assert result.status != ReactionStatus.SIMULATED
+
+
+def test_hydrogenation_accepts_pubchem_hydrogen_notation(service):
+    result = service.simulate_reaction(
+        ReactionRequest(
+            reactants=[ReactionParticipant("C=C")],
+            reagents=[ReactionParticipant("[HH]")],
+        )
+    )
+    assert result.status == ReactionStatus.SIMULATED
+    assert result.reaction_type == "hydrogenation"
+
+
+@pytest.mark.parametrize(
+    ("reactants", "expected_type"),
+    [
+        (["O=O", "CCO"], "aerobic_oxidation"),
+        (["CO", "CC(=O)O"], "esterification"),
+    ],
+)
+def test_two_reactant_rules_accept_reversed_input_order(service, reactants, expected_type):
+    result = service.simulate_reaction(
+        ReactionRequest(reactants=[ReactionParticipant(value) for value in reactants])
+    )
+    assert result.status == ReactionStatus.SIMULATED
+    assert result.reaction_type == expected_type
