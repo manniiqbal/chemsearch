@@ -38,23 +38,17 @@ class ReactionService:
         ]:
             self.reaction_engine.rdkit_service.validate_molecule(participant.canonical_smiles)
 
-        if reaction_request.reaction_type is None:
-            return ReactionResult(
-                status=ReactionStatus.FAILED,
-                reaction_type=None,
-                warnings=["Reaction type is required for rule-based simulation."],
-            )
-
-        matching_rules = self.rule_registry.get_by_reaction_type(reaction_request.reaction_type)
+        matching_rules = (
+            self.rule_registry.get_by_reaction_type(reaction_request.reaction_type)
+            if reaction_request.reaction_type
+            else self.rule_registry.list_all()
+        )
 
         if not matching_rules:
             return ReactionResult(
                 status=ReactionStatus.UNSUPPORTED,
                 reaction_type=reaction_request.reaction_type,
-                warnings=[
-                    f"No supported rules found for reaction type "
-                    f"'{reaction_request.reaction_type}'."
-                ],
+                warnings=["That reaction is not in the supported rule library yet."],
             )
 
         compatible_rules: list[ReactionRule] = []
@@ -75,9 +69,8 @@ class ReactionService:
                 status=ReactionStatus.FAILED,
                 reaction_type=reaction_request.reaction_type,
                 warnings=[
-                    f"No compatible rules found for reaction type "
-                    f"'{reaction_request.reaction_type}' with the supplied "
-                    f"reactants, reagents, and conditions."
+                    "No supported reaction matches these chemicals. Check the names, "
+                    "then try one of the tested examples."
                 ],
             )
 
@@ -114,9 +107,19 @@ class ReactionService:
                 warnings=warnings or ["No compatible rules produced products for these reactants."],
             )
 
+        detected_types = {
+            rule.reaction_type
+            for rule in compatible_rules
+            if any(product_set.rule_id == rule.rule_id for product_set in deduplicated_product_sets)
+        }
+        detected_type = (
+            reaction_request.reaction_type
+            or (next(iter(detected_types)) if len(detected_types) == 1 else "multiple_matches")
+        )
+
         return ReactionResult(
             status=ReactionStatus.SIMULATED,
-            reaction_type=reaction_request.reaction_type,
+            reaction_type=detected_type,
             product_sets=deduplicated_product_sets,
             warnings=warnings,
         )
