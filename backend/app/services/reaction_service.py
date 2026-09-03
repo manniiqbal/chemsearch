@@ -236,17 +236,13 @@ class ReactionService:
         requested_reagent_counts: dict[str, int] = {}
 
         for reagent in reaction_request.reagents:
-            canonical = self.reaction_engine.rdkit_service.canonicalise_molecule(
-                reagent.canonical_smiles
-            )
-            requested_reagent_counts[canonical] = (
-                requested_reagent_counts.get(canonical, 0) + reagent.coefficient
+            identity = self._reagent_identity(reagent.canonical_smiles)
+            requested_reagent_counts[identity] = (
+                requested_reagent_counts.get(identity, 0) + reagent.coefficient
             )
 
         for required_reagent in rule.required_reagents:
-            canonical_required = self.reaction_engine.rdkit_service.canonicalise_molecule(
-                required_reagent.canonical_smiles
-            )
+            canonical_required = self._reagent_identity(required_reagent.canonical_smiles)
             available_count = requested_reagent_counts.get(
                 canonical_required,
                 0,
@@ -256,6 +252,13 @@ class ReactionService:
                 return False
 
         return True
+
+    def _reagent_identity(self, smiles: str) -> str:
+        """Treat common diatomic reagent notations as the same molecule."""
+        formula = self.reaction_engine.rdkit_service.molecular_formula(smiles)
+        if formula in {"H2", "Cl2", "Br2"}:
+            return formula
+        return self.reaction_engine.rdkit_service.canonicalise_molecule(smiles)
 
     def _deduplicate_product_sets(
         self,

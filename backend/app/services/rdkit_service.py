@@ -1,5 +1,5 @@
 from rdkit import Chem
-from rdkit.Chem import rdDepictor
+from rdkit.Chem import rdDepictor, rdMolDescriptors
 
 from app.domain.errors import InvalidMoleculeError
 
@@ -61,6 +61,10 @@ class RDKitService:
             str: Canonical SMILES representation.
         """
         return Chem.MolToSmiles(mol, canonical=True)
+
+    def molecular_formula(self, smiles: str) -> str:
+        """Return a molecular formula for reagent identity checks."""
+        return rdMolDescriptors.CalcMolFormula(self.validate_molecule(smiles))
 
     def render_molecule_svg(
         self,

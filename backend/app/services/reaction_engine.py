@@ -1,3 +1,5 @@
+from itertools import permutations
+
 from rdkit.Chem import rdChemReactions
 
 from app.domain.errors import InvalidReactionRuleError
@@ -34,34 +36,39 @@ class ReactionEngine:
         if reaction is None:
             raise InvalidReactionRuleError(f"Invalid SMARTS for reaction rule {rule.rule_id}.")
 
-        reactant_mols = tuple(
-            self.rdkit_service.validate_molecule(rp.canonical_smiles) for rp in reactants
-        )
-
-        product_sets = reaction.RunReactants(reactant_mols)
-
         converted_product_sets = []
         seen_product_sets = set()
 
-        for product_set in product_sets:
-            converted_products = [
-                ReactionParticipant(
-                    canonical_smiles=self.rdkit_service.mol_to_canonical_smiles(prod),
-                    coefficient=1,
-                )
-                for prod in product_set
-            ]
+        seen_orders: set[tuple[str, ...]] = set()
+        for ordered_reactants in permutations(reactants):
+            order_key = tuple(item.canonical_smiles for item in ordered_reactants)
+            if order_key in seen_orders:
+                continue
+            seen_orders.add(order_key)
 
-            product_key = tuple(sorted(product.canonical_smiles for product in converted_products))
-
-            if product_key not in seen_product_sets:
-                seen_product_sets.add(product_key)
-                converted_product_sets.append(
-                    ReactionProductSet(
-                        products=converted_products,
-                        rule_id=rule.rule_id,
-                        rule_name=rule.name,
+            reactant_mols = tuple(
+                self.rdkit_service.validate_molecule(item.canonical_smiles)
+                for item in ordered_reactants
+            )
+            for product_set in reaction.RunReactants(reactant_mols):
+                converted_products = [
+                    ReactionParticipant(
+                        canonical_smiles=self.rdkit_service.mol_to_canonical_smiles(product),
+                        coefficient=1,
                     )
+                    for product in product_set
+                ]
+                product_key = tuple(
+                    sorted(product.canonical_smiles for product in converted_products)
                 )
+                if product_key not in seen_product_sets:
+                    seen_product_sets.add(product_key)
+                    converted_product_sets.append(
+                        ReactionProductSet(
+                            products=converted_products,
+                            rule_id=rule.rule_id,
+                            rule_name=rule.name,
+                        )
+                    )
 
         return converted_product_sets
