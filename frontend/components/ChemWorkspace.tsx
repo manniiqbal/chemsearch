@@ -12,7 +12,7 @@ const defaultConditions: ReactionConditions = { temperature_c: null, pressure_ba
 const examples = [
     { title: "Aerobic oxidation", equation: "ethanol + oxygen → ethanoic acid + water", reactants: ["ethanol", "oxygen"], reagents: [], catalysts: [], structures: ["CCO", "O=O"] },
     { title: "Hydrogenation", equation: "ethene + hydrogen → ethane", reactants: ["ethene"], reagents: ["hydrogen"], catalysts: ["platinum"], structures: ["C=C"] },
-    { title: "Bromination", equation: "ethene + bromine → 1,2-dibromoethane", reactants: ["ethene"], reagents: ["bromine"], catalysts: [], structures: ["C=C"] },
+    { title: "Bromination", equation: "ethene + bromine → 1,2 dibromoethane", reactants: ["ethene"], reagents: ["bromine"], catalysts: [], structures: ["C=C"] },
     { title: "Esterification", equation: "ethanoic acid + methanol → methyl ethanoate", reactants: ["ethanoic acid", "methanol"], reagents: [], catalysts: ["sulfuric acid"], structures: ["CC(=O)O", "CO"] },
 ] as const
 
@@ -160,7 +160,7 @@ export default function ChemWorkspace() {
                 <div className="input-grid">
                     <ParticipantEditor title="Starting chemicals" helper="Chemicals that will be transformed" values={reactants} onChange={setReactants} minimum={1} placeholder="e.g. ethanol" />
                     <ParticipantEditor title="Other chemicals" helper="Reactants such as oxygen, hydrogen or bromine" values={reagents} onChange={setReagents} placeholder="e.g. hydrogen" />
-                    <ParticipantEditor title="Catalysts" helper="Optional — they affect the reaction but are not used up" values={catalysts} onChange={setCatalysts} placeholder="e.g. platinum" />
+                    <ParticipantEditor title="Catalysts" helper="Optional. They affect the reaction but are not used up" values={catalysts} onChange={setCatalysts} placeholder="e.g. platinum" />
                     <ConditionsForm value={conditions} onChange={setConditions} />
                 </div>
                 {error && <div className="notice error" role="alert"><strong>Check your reaction</strong><span>{error}</span></div>}
