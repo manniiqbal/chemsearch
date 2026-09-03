@@ -1,6 +1,8 @@
 import type { PredictionCandidate, PredictionResult, SimulationResult } from "../lib/types"
 import { MoleculeViewer } from "./MoleculeViewer"
 
+const cleanLabel = (value: string) => value.replaceAll("_", " ").replaceAll("-", " ")
+
 function EmptyResult({ mode }: { mode: "simulate" | "predict" }) {
     return <div className="results-empty" data-result-mode={mode}><span>⌁</span><strong>No result yet</strong><p>Choose an example or enter chemicals, then run the simulator.</p></div>
 }
@@ -8,7 +10,7 @@ function EmptyResult({ mode }: { mode: "simulate" | "predict" }) {
 export function SimulationResults({ result }: { result: SimulationResult | null }) {
     if (!result) return <EmptyResult mode="simulate" />
     return <>
-        <div className="status-row"><span className={`status-pill ${result.status}`}>{result.status === "simulated" ? "Reaction found" : result.status.replace("_", " ")}</span><small>{result.reaction_type?.replaceAll("_", " ")}</small></div>
+        <div className="status-row"><span className={`status-pill ${result.status}`}>{result.status === "simulated" ? "Reaction found" : cleanLabel(result.status)}</span><small>{result.reaction_type ? cleanLabel(result.reaction_type) : null}</small></div>
         {result.product_sets.map((set, index) => (
             <article className="result-card" key={`${set.rule_id}-${index}`}>
                 <div className="result-title"><span>{index === 0 ? "Main product" : `Alternative ${index + 1}`}</span><small>{set.rule_name}</small></div>
@@ -34,7 +36,7 @@ export function PredictionResults({ result, selectedRank, onSelect }: { result: 
             <button className={`candidate-card ${candidate.rank === selectedRank ? "selected" : ""}`} key={candidate.rank} onClick={() => onSelect(candidate)}>
                 <div className="candidate-heading"><span className="rank">#{candidate.rank}</span><strong>{(candidate.confidence * 100).toFixed(1)}%</strong></div>
                 {candidate.products.map((product, index) => <MoleculeViewer key={index} smiles={product.canonical_smiles} />)}
-                <small>{candidate.model_name}</small>
+                <small>{candidate.model_name ? cleanLabel(candidate.model_name) : null}</small>
             </button>
         ))}
         {result.warnings.map((warning, index) => <div className="notice warning" key={index}>{warning}</div>)}
