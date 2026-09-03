@@ -30,13 +30,13 @@ export function ReactionViewer({
     ].filter(Boolean)
 
     if (!reactants.length) {
-        return <div className="stage-empty"><span className="orbital-mark">⌬</span><strong>Build a reaction</strong><p>Enter SMILES below to render true 2D structures.</p></div>
+        return <div className="stage-empty"><span className="orbital-mark">⌬</span><strong>Set up a reaction</strong><p>Enter chemical names above to see their structures.</p></div>
     }
 
     return (
         <div className="reaction-flow">
             <section className="reaction-side">
-                <span className="eyebrow">Reactants</span>
+                <span className="eyebrow">Starting chemicals</span>
                 <div className="molecule-list">
                     {reactants.map((item, index) => <MoleculeViewer key={`${item.canonical_smiles}-${index}`} smiles={item.canonical_smiles} />)}
                 </div>
@@ -47,12 +47,12 @@ export function ReactionViewer({
                 <span className="arrow-caption">{annotation ?? "Awaiting result"}</span>
             </div>
             <section className="reaction-side">
-                <span className="eyebrow">Products</span>
+                <span className="eyebrow">Predicted products</span>
                 {products.length ? (
                     <div className="molecule-list">
                         {products.map((item, index) => <MoleculeViewer key={`${item.canonical_smiles}-${index}`} smiles={item.canonical_smiles} />)}
                     </div>
-                ) : <div className="product-awaiting">Run the workflow to populate products</div>}
+                ) : <div className="product-awaiting">Run the simulator to generate products</div>}
             </section>
         </div>
     )

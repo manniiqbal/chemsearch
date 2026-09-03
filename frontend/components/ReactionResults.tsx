@@ -2,16 +2,16 @@ import type { PredictionCandidate, PredictionResult, SimulationResult } from "..
 import { MoleculeViewer } from "./MoleculeViewer"
 
 function EmptyResult({ mode }: { mode: "simulate" | "predict" }) {
-    return <div className="results-empty"><span>⌁</span><strong>No {mode === "simulate" ? "simulation" : "prediction"} yet</strong><p>Your ranked chemistry output will collect here.</p></div>
+    return <div className="results-empty" data-result-mode={mode}><span>⌁</span><strong>No result yet</strong><p>Choose an example or enter chemicals, then run the simulator.</p></div>
 }
 
 export function SimulationResults({ result }: { result: SimulationResult | null }) {
     if (!result) return <EmptyResult mode="simulate" />
     return <>
-        <div className="status-row"><span className={`status-pill ${result.status}`}>{result.status.replace("_", " ")}</span><small>{result.reaction_type}</small></div>
+        <div className="status-row"><span className={`status-pill ${result.status}`}>{result.status === "simulated" ? "Reaction found" : result.status.replace("_", " ")}</span><small>{result.reaction_type?.replaceAll("_", " ")}</small></div>
         {result.product_sets.map((set, index) => (
             <article className="result-card" key={`${set.rule_id}-${index}`}>
-                <div className="result-title"><span>Product set {index + 1}</span><small>{set.rule_name}</small></div>
+                <div className="result-title"><span>{index === 0 ? "Main product" : `Alternative ${index + 1}`}</span><small>{set.rule_name}</small></div>
                 {set.products.map((product, productIndex) => <MoleculeViewer key={productIndex} smiles={product.canonical_smiles} />)}
                 {result.mappings[index] && <BondSummary mapping={result.mappings[index]} />}
             </article>

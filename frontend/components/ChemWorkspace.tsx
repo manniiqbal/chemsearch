@@ -1,28 +1,26 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { API_BASE_URL, predictReaction, simulateReaction } from "../lib/api"
-import type { Mode, Participant, PredictionCandidate, PredictionResult, ReactionConditions, SimulationResult } from "../lib/types"
+import { API_BASE_URL, simulateReaction } from "../lib/api"
+import type { Participant, ReactionConditions, SimulationResult } from "../lib/types"
 import { ConditionsForm, ParticipantEditor } from "./ReactionEditors"
-import { PredictionResults, SimulationResults } from "./ReactionResults"
+import { SimulationResults } from "./ReactionResults"
 import { ReactionViewer } from "./ReactionViewer"
-import { WorkspaceSidebar } from "./WorkspaceSidebar"
 
 const defaultConditions: ReactionConditions = { temperature_c: null, pressure_bar: null, duration_minutes: null, ph: null, solvent: null, notes: null }
-const reactionPresets = [
-    { value: "hydrogenation", label: "Alkene hydrogenation", description: "Ethene to ethane", reactants: ["C=C"], reagents: [] },
-    { value: "alkene_halogenation", label: "Alkene halogenation", description: "Add bromine across an alkene", reactants: ["C=C"], reagents: ["BrBr"] },
-    { value: "alcohol_oxidation", label: "Alcohol oxidation", description: "Ethanol to ethanal", reactants: ["CCO"], reagents: [] },
-    { value: "carbonyl_reduction", label: "Carbonyl reduction", description: "Ethanal to ethanol", reactants: ["CC=O"], reagents: [] },
-    { value: "esterification", label: "Esterification", description: "Ethanoic acid and methanol to an ester", reactants: ["CC(=O)O", "CO"], reagents: [] },
-    { value: "ester_hydrolysis", label: "Ester hydrolysis", description: "Methyl ethanoate to acid and alcohol", reactants: ["CC(=O)OC"], reagents: [] },
-    { value: "nucleophilic_substitution", label: "Nucleophilic substitution", description: "Bromoethane to ethanol", reactants: ["CCBr"], reagents: [] },
+
+const examples = [
+    { title: "Aerobic oxidation", equation: "ethanol + oxygen → ethanoic acid + water", reactants: ["ethanol", "oxygen"], reagents: [], catalysts: [], structures: ["CCO", "O=O"] },
+    { title: "Hydrogenation", equation: "ethene + hydrogen → ethane", reactants: ["ethene"], reagents: ["hydrogen"], catalysts: ["platinum"], structures: ["C=C"] },
+    { title: "Bromination", equation: "ethene + bromine → 1,2-dibromoethane", reactants: ["ethene"], reagents: ["bromine"], catalysts: [], structures: ["C=C"] },
+    { title: "Esterification", equation: "ethanoic acid + methanol → methyl ethanoate", reactants: ["ethanoic acid", "methanol"], reagents: [], catalysts: ["sulfuric acid"], structures: ["CC(=O)O", "CO"] },
 ] as const
 
-const participants = (values: string[]): Participant[] => values.filter((value) => value.trim()).map((value) => ({ canonical_smiles: value.trim(), coefficient: 1 }))
+const toParticipants = (values: string[]): Participant[] => values.map((canonical_smiles) => ({ canonical_smiles, coefficient: 1 }))
 
 async function resolveMolecule(value: string) {
     const query = value.trim()
+    if (!query) throw new Error("Remove blank chemical fields or enter a chemical name.")
     for (const inputType of ["smiles", "name"] as const) {
         const response = await fetch(`${API_BASE_URL}/api/search/molecule-search`, {
             method: "POST",
@@ -31,91 +29,108 @@ async function resolveMolecule(value: string) {
         })
         const data = await response.json().catch(() => ({})) as { message?: string; molecule?: { canonical_smiles?: string } }
         if (response.ok && data.molecule?.canonical_smiles) return data.molecule.canonical_smiles
-        if (inputType === "name") throw new Error(data.message ?? `Could not find “${query}”. Try a chemical name or valid SMILES.`)
+        if (inputType === "name") throw new Error(`“${query}” was not recognised. Check the spelling or try a SMILES formula.`)
     }
-    throw new Error(`Could not find “${query}”.`)
+    throw new Error(`“${query}” was not recognised.`)
 }
 
-const resolveMolecules = (values: string[]) => Promise.all(values.filter((value) => value.trim()).map(resolveMolecule))
+function validateConditions(conditions: ReactionConditions) {
+    if (conditions.temperature_c != null && conditions.temperature_c < -273.15) return "Temperature cannot be below absolute zero."
+    if (conditions.pressure_bar != null && conditions.pressure_bar <= 0) return "Pressure must be greater than 0 bar."
+    if (conditions.duration_minutes != null && conditions.duration_minutes <= 0) return "Duration must be greater than 0 minutes."
+    if (conditions.ph != null && (conditions.ph < 0 || conditions.ph > 14)) return "pH must be between 0 and 14."
+    return null
+}
 
 export default function ChemWorkspace() {
-    const [mode, setMode] = useState<Mode>("simulate")
-    const [reactants, setReactants] = useState(["C=C"])
+    const [reactants, setReactants] = useState<string[]>(["ethanol", "oxygen"])
     const [reagents, setReagents] = useState<string[]>([])
-    const [reactionType, setReactionType] = useState("hydrogenation")
+    const [catalysts, setCatalysts] = useState<string[]>([])
+    const [resolvedReactants, setResolvedReactants] = useState<string[]>(["CCO", "O=O"])
+    const [resolvedContext, setResolvedContext] = useState<string[]>([])
     const [conditions, setConditions] = useState(defaultConditions)
-    const [simulation, setSimulation] = useState<SimulationResult | null>(null)
-    const [prediction, setPrediction] = useState<PredictionResult | null>(null)
-    const [selectedCandidate, setSelectedCandidate] = useState<PredictionCandidate | null>(null)
-    const [latestMode, setLatestMode] = useState<"simulate" | "predict" | null>(null)
+    const [result, setResult] = useState<SimulationResult | null>(null)
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
-    const reactantParticipants = useMemo(() => participants(reactants), [reactants])
-    const reagentParticipants = useMemo(() => participants(reagents), [reagents])
-    const simulationProducts = simulation?.product_sets[0]?.products ?? []
-    const predictionProducts = selectedCandidate?.products ?? prediction?.candidates[0]?.products ?? []
-    const visibleResultMode = mode === "visualize" ? latestMode : mode
-    const canvasProducts = visibleResultMode === "simulate" ? simulationProducts : visibleResultMode === "predict" ? predictionProducts : []
-    const annotation = visibleResultMode === "simulate"
-        ? simulation?.product_sets[0]?.rule_name ?? reactionType.replaceAll("_", " ")
-        : visibleResultMode === "predict" && (selectedCandidate ?? prediction?.candidates[0])
-            ? `ReactionT5 · ${((selectedCandidate ?? prediction!.candidates[0]).confidence * 100).toFixed(1)}% relative score`
-            : undefined
-    const selectedPreset = reactionPresets.find((preset) => preset.value === reactionType) ?? reactionPresets[0]
+    const reactantParticipants = useMemo(() => toParticipants(resolvedReactants), [resolvedReactants])
+    const products = result?.product_sets[0]?.products ?? []
 
-    function loadReactionPreset(value: string) {
-        const preset = reactionPresets.find((item) => item.value === value)
-        if (!preset) return
-        setReactionType(preset.value)
-        setReactants([...preset.reactants])
-        setReagents([...preset.reagents])
-        setSimulation(null)
-        setError(null)
+    function loadExample(index: number) {
+        const example = examples[index]
+        setReactants([...example.reactants]); setReagents([...example.reagents]); setCatalysts([...example.catalysts])
+        setResolvedReactants([...example.structures]); setResolvedContext([]); setConditions(defaultConditions); setResult(null); setError(null)
     }
 
     async function run() {
-        if (!reactantParticipants.length) { setError("Add at least one chemical name or valid SMILES."); return }
-        setLoading(true); setError(null)
+        if (!reactants.length || reactants.every((value) => !value.trim())) { setError("Add at least one starting chemical."); return }
+        if (reactants.length > 4) { setError("This simulator supports up to four starting chemicals at once."); return }
+        const conditionError = validateConditions(conditions)
+        if (conditionError) { setError(conditionError); return }
+
+        setLoading(true); setError(null); setResult(null)
         try {
-            const [resolvedReactants, resolvedReagents] = await Promise.all([resolveMolecules(reactants), resolveMolecules(reagents)])
-            const resolvedReactantParticipants = participants(resolvedReactants)
-            const resolvedReagentParticipants = participants(resolvedReagents)
-            setReactants(resolvedReactants)
-            setReagents(resolvedReagents)
-            if (mode === "simulate") {
-                const result = await simulateReaction({ reactants: resolvedReactantParticipants, reagents: resolvedReagentParticipants, reaction_type: reactionType, conditions })
-                setSimulation(result); setLatestMode("simulate")
-            } else if (mode === "predict") {
-                const result = await predictReaction({ reactants: resolvedReactantParticipants, reagents: resolvedReagentParticipants, conditions })
-                setPrediction(result); setSelectedCandidate(result.candidates[0] ?? null); setLatestMode("predict")
-            }
+            const [canonicalReactants, canonicalReagents, canonicalCatalysts] = await Promise.all([
+                Promise.all(reactants.map(resolveMolecule)),
+                Promise.all(reagents.map(resolveMolecule)),
+                Promise.all(catalysts.map(resolveMolecule)),
+            ])
+            setResolvedReactants(canonicalReactants)
+            setResolvedContext([...canonicalReagents, ...canonicalCatalysts])
+            const response = await simulateReaction({
+                reactants: toParticipants(canonicalReactants),
+                reagents: toParticipants([...canonicalReagents, ...canonicalCatalysts]),
+                reaction_type: null,
+                conditions,
+            })
+            setResult(response)
+            if (response.status !== "simulated") setError(response.warnings[0] ?? "No supported reaction was found for those chemicals.")
         } catch (caught) {
-            setError(caught instanceof Error ? caught.message : "An unexpected error occurred.")
+            setError(caught instanceof Error ? caught.message : "Something went wrong. Please try again.")
         } finally { setLoading(false) }
     }
 
-    const selectCandidate = (candidate: PredictionCandidate) => { setSelectedCandidate(candidate); setLatestMode("predict") }
-    const title = mode === "simulate" ? "Rule-based simulator" : mode === "predict" ? "ML reaction predictor" : "Reaction visualizer"
-    const subtitle = mode === "simulate" ? "Choose a tested example or enter common chemical names / SMILES." : mode === "predict" ? "Enter common chemical names or SMILES for ReactionT5v2." : "Inspect the latest result as structures, not raw JSON."
+    const annotation = result?.product_sets[0]?.rule_name ?? "Reaction type detected automatically"
 
-    return <main className="app-shell">
-        <WorkspaceSidebar mode={mode} onChange={setMode} />
-        <section className="workspace-main">
-            <header className="topbar"><div><span className="eyebrow">Chemical intelligence / Workbench</span><h1>{title}</h1><p>{subtitle}</p></div><div className="api-state"><span className="live-dot" /> API-connected</div></header>
-            <div className="canvas-panel">
-                <div className="panel-heading"><div><span className="eyebrow">Live reaction canvas</span><h2>Structure overview</h2></div><span className="mode-chip">{mode}</span></div>
-                <ReactionViewer reactants={reactantParticipants} products={canvasProducts} reagents={reagentParticipants} conditions={conditions} annotation={annotation} />
-            </div>
-            {mode !== "visualize" ? <div className="editor-panel">
-                <ParticipantEditor title="Reactants" values={reactants} onChange={setReactants} minimum={1} />
-                <ParticipantEditor title="Reagents" values={reagents} onChange={setReagents} />
-                {mode === "simulate" && <section className="form-section compact-section"><div className="form-heading"><div><span className="eyebrow">Rule library</span><h3>Reaction class</h3></div></div><select value={reactionType} onChange={(e) => loadReactionPreset(e.target.value)}>{reactionPresets.map((preset) => <option value={preset.value} key={preset.value}>{preset.label}</option>)}</select><div className="notice"><strong>{selectedPreset.description}</strong><br /><span>Compatible example loaded automatically. You can also type chemical names or SMILES above.</span></div></section>}
-                <ConditionsForm value={conditions} onChange={setConditions} />
-                {error && <div className="notice error" role="alert">{error}</div>}
-                <button className="run-button" onClick={run} disabled={loading}>{loading ? <><span className="spinner" />{mode === "predict" ? "ReactionT5 is reasoning…" : "Applying reaction rules…"}</> : mode === "predict" ? "Generate predictions" : "Simulate reaction"}</button>
-            </div> : <div className="visualize-note">The canvas reflects your most recent workflow and selected prediction candidate.</div>}
-        </section>
-        <aside className="results-panel"><div className="results-header"><span className="eyebrow">Output</span><h2>Results</h2><p>{mode === "predict" ? "Select a candidate to update the canvas." : "Products, provenance and structural changes."}</p></div><div className="results-list">{mode === "predict" ? <PredictionResults result={prediction} selectedRank={(selectedCandidate ?? prediction?.candidates[0])?.rank ?? 1} onSelect={selectCandidate} /> : mode === "simulate" ? <SimulationResults result={simulation} /> : latestMode === "predict" ? <PredictionResults result={prediction} selectedRank={(selectedCandidate ?? prediction?.candidates[0])?.rank ?? 1} onSelect={selectCandidate} /> : <SimulationResults result={simulation} />}</div></aside>
-    </main>
+    return (
+        <main className="workbench-shell">
+            <header className="site-header">
+                <a className="brand" href="#top" aria-label="ChemSearch home"><span className="brand-mark">Cs</span><span><strong>ChemSearch</strong><small>Reaction workbench</small></span></a>
+                <div className="scope-badge"><span className="live-dot" /> Single-step simulator</div>
+            </header>
+
+            <section className="intro" id="top">
+                <span className="eyebrow">Guided chemistry workspace</span>
+                <h1>Enter chemicals. We identify the reaction.</h1>
+                <p>Use everyday chemical names or SMILES. ChemSearch checks the inputs, applies a tested rule, and explains the product clearly.</p>
+            </section>
+
+            <section className="example-strip" aria-labelledby="examples-title">
+                <div className="section-heading"><div><span className="step-number">01</span><h2 id="examples-title">Start with a tested example</h2></div><small>Useful for checking the simulator</small></div>
+                <div className="example-grid">
+                    {examples.map((example, index) => <button className="example-card" type="button" onClick={() => loadExample(index)} key={example.title}><strong>{example.title}</strong><span>{example.equation}</span></button>)}
+                </div>
+            </section>
+
+            <section className="workspace-card">
+                <div className="section-heading workspace-heading"><div><span className="step-number">02</span><h2>Set up the reaction</h2></div><small>Names are converted to structures when you run it</small></div>
+                <div className="input-grid">
+                    <ParticipantEditor title="Starting chemicals" helper="Chemicals that will be transformed" values={reactants} onChange={setReactants} minimum={1} placeholder="e.g. ethanol" />
+                    <ParticipantEditor title="Other chemicals" helper="Reactants such as oxygen, hydrogen or bromine" values={reagents} onChange={setReagents} placeholder="e.g. hydrogen" />
+                    <ParticipantEditor title="Catalysts" helper="Optional — they affect the reaction but are not used up" values={catalysts} onChange={setCatalysts} placeholder="e.g. platinum" />
+                    <ConditionsForm value={conditions} onChange={setConditions} />
+                </div>
+                {error && <div className="notice error" role="alert"><strong>Check your reaction</strong><span>{error}</span></div>}
+                <button className="run-button" type="button" onClick={run} disabled={loading}>{loading ? <><span className="spinner" />Checking chemicals and reaction…</> : "Identify and simulate reaction"}</button>
+            </section>
+
+            <section className="reaction-section" aria-labelledby="reaction-title">
+                <div className="section-heading"><div><span className="step-number">03</span><h2 id="reaction-title">Reaction result</h2></div><small>Structures and detected rule</small></div>
+                <ReactionViewer reactants={reactantParticipants} products={products} reagents={toParticipants(resolvedContext)} conditions={conditions} annotation={annotation} />
+                <SimulationResults result={result} />
+            </section>
+
+            <footer><strong>Supported scope</strong><span>Tested single-step reactions: aerobic oxidation, alcohol oxidation, hydrogenation, halogenation, carbonyl reduction, esterification, ester hydrolysis and nucleophilic substitution.</span></footer>
+        </main>
+    )
 }
