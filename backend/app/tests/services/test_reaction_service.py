@@ -28,6 +28,7 @@ def test_successful_hydrogenation_simulation():
 
     request = ReactionRequest(
         reactants=[ReactionParticipant(canonical_smiles="C=C")],
+        reagents=[ReactionParticipant(canonical_smiles="[H][H]")],
         reaction_type="hydrogenation",
     )
 
@@ -38,18 +39,18 @@ def test_successful_hydrogenation_simulation():
     assert result.product_sets[0].products[0].canonical_smiles == "CC"
 
 
-def test_missing_reaction_type_returns_failed():
+def test_missing_reaction_type_triggers_detection():
     reaction_service = build_reaction_service()
 
     request = ReactionRequest(
-        reactants=[ReactionParticipant(canonical_smiles="C=C")],
+        reactants=[ReactionParticipant(canonical_smiles="CCO")],
         reaction_type=None,
     )
 
     result = reaction_service.simulate_reaction(request)
 
-    assert result.status == ReactionStatus.FAILED
-    assert result.product_sets == []
+    assert result.status == ReactionStatus.SIMULATED
+    assert result.reaction_type == "alcohol_oxidation"
 
 
 def test_unsupported_reaction_type_returns_unsupported():
@@ -88,6 +89,7 @@ def test_no_reaction_returns_no_reaction():
 
     request = ReactionRequest(
         reactants=[ReactionParticipant(canonical_smiles="CC")],
+        reagents=[ReactionParticipant(canonical_smiles="[H][H]")],
         reaction_type="hydrogenation",
     )
 
