@@ -30,7 +30,11 @@ async function resolveMolecule(value: string) {
             body: JSON.stringify({ query, input_type: inputType }),
         })
         const data = await response.json().catch(() => ({})) as { message?: string; molecule?: { canonical_smiles?: string } }
-        if (response.ok && data.molecule?.canonical_smiles) return data.molecule.canonical_smiles
+        if (response.ok && data.molecule?.canonical_smiles) {
+            return data.molecule.canonical_smiles === "[HH]" ? "[H][H]" : data.molecule.canonical_smiles
+        }
+        if (inputType === "name" && response.status === 429) throw new Error("The chemical name service is busy. Wait a moment and try again.")
+        if (inputType === "name" && response.status >= 500) throw new Error("The chemical name service is temporarily unavailable. Try again shortly or enter a SMILES formula.")
         if (inputType === "name") throw new Error(`“${query}” was not recognised. Check the spelling or try a SMILES formula.`)
     }
     throw new Error(`“${query}” was not recognised.`)
@@ -100,7 +104,9 @@ export default function ChemWorkspace() {
             }
             setResult(response)
             setActiveOutput("rules")
-            if (response.status !== "simulated") setError(cleanLabel(response.warnings[0] ?? "No supported reaction was found for those chemicals."))
+            if (response.status !== "simulated") {
+                setError("No tested reaction matches this combination. Check where each chemical belongs, try a tested example, or use the experimental ML prediction.")
+            }
         } catch (caught) {
             setError(caught instanceof Error ? caught.message : "Something went wrong. Please try again.")
         } finally { setLoading(false) }
